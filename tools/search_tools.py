@@ -1,7 +1,7 @@
 """tools/search_tools.py —— DevMate 的检索工具
 
 把"联网搜索 / 取网页内容"封装成工具。这里给出最简形态（你可换成 Tavily/Exa 等）。
-I/O 型工具用 async，避免阻塞事件循环（本课异步基调）。
+I/O 型工具用 async，避免阻塞事件循环。
 """
 """tools/search_tools.py —— DevMate 的检索工具
 

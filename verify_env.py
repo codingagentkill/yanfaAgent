@@ -1,4 +1,4 @@
-"""verify_env.py —— 启动期自检（异步版，与全课异步基调一致）"""
+"""verify_env.py —— 启动期自检"""
 import asyncio
 import sys
 
