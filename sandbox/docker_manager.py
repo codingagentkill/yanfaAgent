@@ -91,6 +91,7 @@ async def create_readonly_sandbox(source_sandbox: DockerSandbox) -> DockerSandbo
         "--network", "none", "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges", "--read-only",
         "--tmpfs", f"{workdir}:rw,exec,size=512m,uid=1000",
+        "--tmpfs", "/tmp:rw,exec,size=128m,uid=1000",
         "--memory", s.sandbox_mem_limit, "--memory-swap", s.sandbox_mem_limit,
         "--pids-limit", str(s.sandbox_pids_limit), "--cpus", s.sandbox_cpus,
         "--user", "1000:1000", "-w", workdir,
