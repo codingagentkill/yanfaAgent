@@ -43,8 +43,8 @@ mcp = ["langchain-mcp-adapters>=0.1.0"]
 sandbox = ["langchain-modal>=0.0.1"]
 # Redis 作为 checkpointer/store（可选，需 Redis Stack）：第 8 章
 redis-graph = ["langgraph-checkpoint-redis>=0.4.0"]
-# 独立向量库（PostgresStore 已含 pgvector，独立 RAG 时才需要）：第 8 章
-vectorstore = ["langchain-postgres>=0.0.12"]
+# 独立向量库（RAG：代码库检索 + 历史经验复用，pgvector + 切块）
+vectorstore = ["langchain-postgres>=0.0.12", "langchain-text-splitters>=0.3.0"]
 # 任务队列 + 限流（后台长任务 / 并发治理）：第 10、11 章
 serving = ["arq>=0.26.0", "slowapi>=0.1.9", "sse-starlette>=2.1.0"]
 # 多副本部署：第 12 章
