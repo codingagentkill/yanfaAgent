@@ -55,6 +55,12 @@ async def lifespan(app: FastAPI):
     await store.setup()
     logger.info("🔗  AsyncPostgresSaver / AsyncPostgresStore 已 setup")
 
+    # 人工审批的 pending 记录表
+    from api.review import setup_pending_table
+
+    await setup_pending_table(pool)
+    logger.info("🔗  pending_reviews 表已就绪")
+
     # ④ Redis 池
     redis = build_redis()
 

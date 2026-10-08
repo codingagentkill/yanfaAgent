@@ -19,3 +19,9 @@ logs/
 test_cp.txt
 loadtest/results*
 eval/baseline.json
+
+# macOS
+.DS_Store
+
+# 用户克隆进来的独立仓库（不提交进本项目）
+agent-communication-project/

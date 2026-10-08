@@ -14,3 +14,8 @@ def get_checkpointer(request: Request):
 def get_store(request: Request):
     """取在 lifespan 里建好的 AsyncPostgresStore。"""
     return request.app.state.store
+
+
+def get_pool(request: Request):
+    """取在 lifespan 里建好的 Postgres 异步连接池。"""
+    return request.app.state.pg_pool

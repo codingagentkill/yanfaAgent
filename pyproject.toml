@@ -57,3 +57,8 @@ obs = ["langsmith>=0.3.0", "prometheus-client>=0.20.0", "locust>=2.29.0"]
 # 设为非包项目：uv sync 只装依赖、不构建本项目本身。
 # 否则 uv 会尝试用 hatchling 构建本项目，但因没有与项目同名的 yanfa_agent/ 目录而报错。
 package = false
+
+[tool.pytest.ini_options]
+# 让 pytest 从项目根目录 import（agent/app/infra 等顶层包），并只收集 tests/ 下的用例。
+pythonpath = ["."]
+testpaths = ["tests"]

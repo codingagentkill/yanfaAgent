@@ -136,11 +136,10 @@ async def build_agent(
         model=build_model(),
         system_prompt=DEVMATE_SYSTEM_PROMPT + (
             f"\n\n【执行环境与路径规则——必须严格遵守】"
-            f"\n你运行在一个沙箱里，项目代码已位于 `{workdir}/` 下（含 `{workdir}/app/`、`{workdir}/tests/`）。"
+            f"\n你运行在一个沙箱里，目标项目代码已位于 `{workdir}/` 下（具体目录结构用 `ls {workdir}` 查看，别假设一定有 app/ 或 tests/）。"
             f"\n⚠️ 所有文件操作（write_file/edit_file/read_file）和命令（execute）都【必须】使用以 `{workdir}/` 开头的【绝对路径】。"
-            f"\n✅ 正确：写测试到 `{workdir}/tests/test_pricing.py`、改代码 `{workdir}/app/pricing.py`、"
-            f"跑测试 `cd {workdir} && python -m pytest -q`。"
-            f"\n❌ 错误（会因权限被拒绝，绝不要这样）：`/test_pricing.py`、`test_pricing.py`、`/app/pricing.py` 这类根路径或相对路径。"
+            f"\n✅ 正确：改代码 `{workdir}/<实际路径>/xxx.py`、写测试 `{workdir}/<测试目录>/test_xxx.py`、跑测试 `cd {workdir} && python -m pytest -q`。"
+            f"\n❌ 错误（会因权限被拒绝，绝不要这样）：`/xxx.py`、`xxx.py`、`/app/xxx.py` 这类根路径或相对路径。"
             f"\n如果你不确定某文件在哪，先用 `ls {workdir}` 查看，再用绝对路径操作。"
             "\n\n你是团队负责人：对复杂 Issue，先用 task() 委派给 planner 规划，"
             "再依次委派 researcher/coder/tester/reviewer。你只做协调，不亲自写大量代码。"
@@ -173,9 +172,10 @@ async def create_agent_runtime(
         store: Any = None,
         user_id: str = "anonymous",
         channel: str = "cli",
+        repo_path: str | None = None,
 ) -> AgentRuntime:
     """创建沙箱，并返回绑定该沙箱的 Agent 运行时。"""
-    backend, sandbox, client, workdir = await build_sandbox_backend(thread_id)
+    backend, sandbox, client, workdir = await build_sandbox_backend(thread_id, repo_path)
     try:
         agent = await build_agent(
             backend,
@@ -197,11 +197,19 @@ async def create_agent_runtime(
 async def agent_runtime_session(**kwargs: Any) -> AsyncIterator[AgentRuntime]:
     """提供 Agent 运行时，并在退出时自动清理其沙箱。"""
     runtime = await create_agent_runtime(**kwargs)
+    repo_path = kwargs.get("repo_path")
     try:
         yield runtime
     finally:
+        from sandbox.docker_sandbox import DockerSandbox
         from sandbox.manager import cleanup_sandbox
 
+        if isinstance(runtime.sandbox, DockerSandbox):
+            # docker 沙箱销毁前，先把 agent 改动的项目文件反向导出到宿主，
+            # 否则改动会随 tmpfs 一起蒸发，用户看不到实现（见 export_sandbox_changes）。
+            from sandbox.docker_manager import export_sandbox_changes
+
+            await export_sandbox_changes(runtime.sandbox, Path(repo_path) if repo_path else None)
         await cleanup_sandbox(runtime.sandbox)
 
 
@@ -214,19 +222,20 @@ async def agent_session(**kwargs: Any) -> AsyncIterator[Any]:
 
 # agent/main.py（新增：沙箱后端按配置可插拔）
 
-async def build_sandbox_backend(thread_id: str | None = None):
+async def build_sandbox_backend(thread_id: str | None = None, repo_path: str | None = None):
     """
     按 IVC_SANDBOX_PROVIDER 选用沙箱后端，返回 (backend, workdir)。
-    docker  → 自托管加固容器（本章，本地可跑）
+    docker  → 自托管加固容器（本地可跑）
     daytona → 外部托管沙箱（第 6 章）
     两者都是 BaseSandbox，create_deep_agent(backend=...) 一视同仁。
+    repo_path 指定要开发的目标仓库本地路径；不传则默认本项目自己。
     """
     s = get_settings()
 
     if s.sandbox_provider == "docker":
         from sandbox.docker_manager import create_one_sandbox, seed_project
         sandbox = await create_one_sandbox()
-        await seed_project(sandbox)
+        await seed_project(sandbox, Path(repo_path) if repo_path else None)
         return sandbox, sandbox, None, s.sandbox_workdir
     else:  # daytona —— 第 6 章那套
         from sandbox.manager import get_or_create_sandbox_backend

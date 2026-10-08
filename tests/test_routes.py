@@ -16,7 +16,7 @@ def test_get_order_quote():
     quote_request = QuoteRequest(items=items)
 
     # 发起请求
-    response = client.post("/orders/quote", json=quote_request.model_dump())
+    response = client.post("/orders/quote", json=quote_request.model_dump(mode="json"))
 
     # 验证响应
     assert response.status_code == 200, "报价请求失败"
