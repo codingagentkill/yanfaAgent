@@ -4,6 +4,7 @@
    生产/Web 服务请改用 StateBackend + 沙箱（第 8、11 章）。
 """
 from contextlib import asynccontextmanager
+import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, AsyncIterator
@@ -116,6 +117,7 @@ async def build_agent(
         store=None,
         user_id: str = "anonymous",
         channel: str = "cli",
+        repo_path: str | None = None,
 )-> Any:
     """使用已有沙箱后端组装并返回 DevMate Agent。
 
@@ -132,6 +134,15 @@ async def build_agent(
 
     mcp_tools = await MCPManager.from_settings().get_tools()
 
+    # RAG：给 Agent 挂语义检索工具（检索跑在宿主，文件操作仍在沙箱）
+    extra_tools = []
+    if get_settings().rag_enabled:
+        from infra.rag import build_experience_tool, build_retrieve_tool, collection_for
+
+        repo_root = Path(repo_path) if repo_path else PROJECT_ROOT
+        extra_tools.append(build_retrieve_tool(collection_for(str(repo_root))))
+        extra_tools.append(build_experience_tool())
+
     agent = create_deep_agent(
         model=build_model(),
         system_prompt=DEVMATE_SYSTEM_PROMPT + (
@@ -146,6 +157,7 @@ async def build_agent(
             "委派时，把上面的【绝对路径规则】一并转达给子代理。"
         ),
         backend=sandbox_backend,
+        tools=extra_tools or None,
         subagents=build_subagents(workdir),
         # 路径相对 backend 的 root（= PROJECT_ROOT），用正斜杠（官方要求）
         skills=[f"{workdir}/skills"],
@@ -184,6 +196,7 @@ async def create_agent_runtime(
             store=store,
             user_id=user_id,
             channel=channel,
+            repo_path=repo_path,
         )
     except BaseException:
         from sandbox.manager import cleanup_sandbox
@@ -235,7 +248,17 @@ async def build_sandbox_backend(thread_id: str | None = None, repo_path: str | N
     if s.sandbox_provider == "docker":
         from sandbox.docker_manager import create_one_sandbox, seed_project
         sandbox = await create_one_sandbox()
-        await seed_project(sandbox, Path(repo_path) if repo_path else None)
+        repo_root = Path(repo_path) if repo_path else PROJECT_ROOT
+        await seed_project(sandbox, repo_root)
+
+        # RAG：索引目标仓库（失败不影响主流程）
+        if s.rag_enabled:
+            try:
+                from infra.rag import collection_for, index_repo
+                await asyncio.to_thread(index_repo, str(repo_root), collection_for(str(repo_root)))
+            except Exception as e:  # noqa: BLE001 索引失败降级为无 RAG，不阻断请求
+                logger.warning("RAG 索引失败（本次请求无检索能力）：{}", e)
+
         return sandbox, sandbox, None, s.sandbox_workdir
     else:  # daytona —— 第 6 章那套
         from sandbox.manager import get_or_create_sandbox_backend

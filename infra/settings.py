@@ -33,6 +33,12 @@ class Settings(BaseSettings):
         "cheap": "qwen-turbo",  # 简单任务：读代码、总结
     }
 
+    # ===== RAG（代码库语义检索）=====
+    embedding_model: str = "text-embedding-v3"  # DashScope 的 embedding 模型
+    rag_enabled: bool = True                    # 是否索引目标仓库并给 Agent 挂检索工具
+    rag_collection: str = "yanfa_repo"          # 代码向量库 collection 名（PGVector）
+    rag_experience_collection: str = "yanfa_experience"  # 历史经验 collection 名
+
     # ===== 连接弹性 =====
     max_retries: int = 12
     timeout: int = 60

@@ -14,6 +14,10 @@ from agent.main import agent_session
 from api.schemas import IssueRequest, IssueResponse, ReviewRequest, ReviewResponse
 from api.deps import get_checkpointer, get_pool, get_store
 from api.review import commit_and_push, create_pending, get_pending, pop_pending
+from infra.logging import get_logger
+from infra.settings import get_settings
+
+logger = get_logger()
 
 router = APIRouter(prefix="/issues", tags=["issues"])
 
@@ -63,6 +67,15 @@ async def submit_issue(
         )
 
     reply = result["messages"][-1].content if result.get("messages") else ""
+
+    # RAG：把这次任务的 issue + 解法记进经验库（供后续任务检索参考）
+    if get_settings().rag_enabled:
+        from infra.rag import record_experience
+        try:
+            await asyncio.to_thread(record_experience, req.issue, reply, repo_path or "")
+        except Exception as e:  # noqa: BLE001 记录失败不影响主流程
+            logger.warning("记录历史经验失败：{}", e)
+
     review_id = await create_pending(pool, repo_path, req.issue) if repo_path else None
     return IssueResponse(thread_id=thread_id, reply=reply, repo_path=repo_path, review_id=review_id)
 
