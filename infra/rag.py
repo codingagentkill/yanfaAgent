@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import hashlib
+import tempfile
 from pathlib import Path
 
 from langchain_core.documents import Document
@@ -47,8 +48,12 @@ class DashScopeEmbeddings(Embeddings):
         self._client = OpenAI(api_key=api_key, base_url=base_url)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        resp = self._client.embeddings.create(model=self._model, input=texts)
-        return [d.embedding for d in resp.data]
+        vectors: list[list[float]] = []
+        for i in range(0, len(texts), 25):  # DashScope 单次有 batch 上限，分批调用
+            batch = texts[i:i + 25]
+            resp = self._client.embeddings.create(model=self._model, input=batch)
+            vectors.extend(d.embedding for d in resp.data)
+        return vectors
 
     def embed_query(self, text: str) -> list[float]:
         return self.embed_documents([text])[0]
@@ -105,13 +110,40 @@ def _collect_docs(root: Path) -> list[Document]:
     return docs
 
 
+def _repo_fingerprint(root: Path) -> str:
+    """计算仓库指纹（文件相对路径 + mtime + 大小），用于判断是否需要重新索引。"""
+    parts = []
+    for fp in root.rglob("*"):
+        if not fp.is_file():
+            continue
+        if any(p.startswith(".") for p in fp.relative_to(root).parts):
+            continue
+        st = fp.stat()
+        parts.append(f"{fp.relative_to(root)}:{st.st_mtime_ns}:{st.st_size}")
+    return hashlib.md5("|".join(sorted(parts)).encode()).hexdigest()
+
+
+def _cache_path(collection: str) -> Path:
+    """索引指纹的缓存文件路径（放在系统临时目录）。"""
+    return Path(tempfile.gettempdir()) / "yanfa_rag_cache" / f"{collection}.fp"
+
+
 def index_repo(repo_path: str, collection: str) -> int:
-    """把仓库索引进向量库，返回索引的文档块数。"""
-    docs = _collect_docs(Path(repo_path))
+    """把仓库索引进向量库，返回索引的文档块数（仓库未变化则跳过索引）。"""
+    root = Path(repo_path)
+    fingerprint = _repo_fingerprint(root)
+    cache = _cache_path(collection)
+    if cache.exists() and cache.read_text().strip() == fingerprint:
+        logger.info("RAG：仓库未变化（指纹一致），跳过索引")
+        return 0
+
+    docs = _collect_docs(root)
     if not docs:
         logger.warning("RAG：仓库 {} 没有可索引的文本文件", repo_path)
         return 0
     get_vector_store(collection).add_documents(docs)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(fingerprint)
     logger.info("RAG：已索引 {} 个代码块进 collection {}", len(docs), collection)
     return len(docs)
 
