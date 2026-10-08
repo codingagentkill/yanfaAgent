@@ -513,7 +513,6 @@ yanfaAgent/
 yanfaAgent 仍在持续迭代，后续计划包括：
 
 - [ ] 优化 Multi-Agent 调度策略
-- [ ] 引入 RAG / Knowledge Base
 - [ ] 完善 Tenant 与权限管理
 - [ ] 建立 CI/CD Pipeline
 - [ ] 完善 Agent Evaluation 数据集
